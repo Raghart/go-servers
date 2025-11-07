@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Raghart/go-servers/internal/auth"
 	"github.com/Raghart/go-servers/internal/database"
 )
 
@@ -22,6 +23,19 @@ func (cfg *apiConfig) handleValidateString(w http.ResponseWriter, req *http.Requ
 		return
 	}
 
+	authToken, err := auth.GetBearerToken(req.Header)
+
+	if err != nil {
+		jsonResponseError(w, 400, fmt.Sprintf("invalid request: %v", err))
+	}
+
+	user_id, err := auth.ValidateJWT(authToken, cfg.secretString)
+
+	if err != nil {
+		jsonResponseError(w, http.StatusUnauthorized, fmt.Sprintf("invalid token: %v. error:%v", authToken, err))
+		return
+	}
+
 	if len(strRequest.Body) > 140 {
 		jsonResponseError(w, http.StatusBadRequest, "Chirp is too long")
 	}
@@ -30,7 +44,7 @@ func (cfg *apiConfig) handleValidateString(w http.ResponseWriter, req *http.Requ
 
 	chirpParams := database.CreateChipParams{
 		Body:   parsedStr,
-		UserID: strRequest.User_id,
+		UserID: user_id,
 	}
 
 	newChirp, err := cfg.db.CreateChip(context.Background(), chirpParams)
@@ -44,7 +58,7 @@ func (cfg *apiConfig) handleValidateString(w http.ResponseWriter, req *http.Requ
 		Created_at: newChirp.CreatedAt,
 		Updated_at: newChirp.UpdatedAt,
 		Body:       parsedStr,
-		User_id:    strRequest.User_id,
+		User_id:    user_id,
 	}
 
 	jsonResponse(w, 201, newUserChip)
